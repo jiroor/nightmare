@@ -413,7 +413,7 @@ describe('Nightmare', function () {
     it('should fire an event when a resource request is started', function (done) {
       var fired = false;
       new Nightmare()
-        .on('resourceRequestStarted', function (requestData, networkRequest) {          
+        .on('resourceRequestStarted', function (requestData, networkRequest) {
           if (requestData.url.indexOf('yui') !== 0) {
             networkRequest.abort();
           }
@@ -545,6 +545,49 @@ describe('Nightmare', function () {
           done();
         });
     });
+
+    it('should fire the exit handler once the process exits', function (done) {
+      new Nightmare()
+        .on('exit', function (code, signal) {
+          code.should.equal(1);
+          done();
+        })
+        .goto('http://example.com')
+        .run(function (err, nightmare) {
+          if (err) return done(err);
+          nightmare.phantomJS.process.kill(); // force the handler above to fire
+        });
+    });
+
+    it('should throw when an exit handler is not defined', function (done) {
+      // we need to override mocha's listener, but not remove them forever (just for this test)
+      var listeners = process.listeners('uncaughtException');
+      process.removeAllListeners('uncaughtException');
+      // now, we can add our own listener (as a one-time so it will be removed automatically)
+      process.once('uncaughtException', function (err) {
+        // re-attach the listeners we saved earlier
+        listeners.forEach(function (fn) {
+          process.on('uncaughtException', fn);
+        });
+
+        // now run our assertions
+        checkError(err);
+      });
+
+      new Nightmare()
+        .goto('http://example.com')
+        .run(function (err, nightmare) {
+          if (err) return done(err);
+          nightmare.phantomJS.process.kill(); // force the uncaught exception
+        });
+
+      function checkError(err) {
+        err.message.should.equal('the phantomjs process ended unexpectedly')
+        err.code.should.equal(1);
+        done();
+      }
+    });
+
   });
 
   /**
@@ -633,7 +676,7 @@ describe('Nightmare', function () {
   /**
    * multiple
    */
-  
+
   describe('multiple', function () {
 
     it('should run fine with two instances in parallel', function (done) {
